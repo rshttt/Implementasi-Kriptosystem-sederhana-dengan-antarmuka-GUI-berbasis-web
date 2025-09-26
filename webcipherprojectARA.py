@@ -1,20 +1,20 @@
-#jangan lupa install flask numpy dulu ye
+# jangan lupa install flask numpy dulu ye
+# pip install flask numpy
 
 from flask import Flask, request, render_template_string, send_file
 from io import BytesIO
 import numpy as np
 import string
-import base64
 
 app = Flask(__name__)
 app.secret_key = 'change-this-for-prod'
 
+# == Konstanta alfabet ==
 ALPHABET = string.ascii_uppercase
 A2I = {c: i for i, c in enumerate(ALPHABET)}
 I2A = {i: c for i, c in enumerate(ALPHABET)}
 
-#==Utilities==
-
+# == Utilities ==
 def sanitize_letters(text):
     return ''.join([c for c in text.upper() if 'A' <= c <= 'Z'])
 
@@ -33,18 +33,10 @@ def modinv(a, m):
         raise ValueError(f'Modular inverse for {a} mod {m} does not exist')
     return x % m
 
-#==ciper ciperan==
-
-# Shift
-def shift_char(ch, k):
-    if ch.isupper():
-        return chr((ord(ch) - ord('A') + k) % 26 + ord('A'))
-    else:
-        return chr((ord(ch) - ord('a') + k) % 26 + ord('a'))
-
+# == Shift (Caesar) ==
 def shift_encrypt_text(text, key):
     k = int(key) % 26
-    return ''.join(shift_char(ch, k) if ch.isalpha() else ch for ch in text)
+    return ''.join(I2A[(A2I[ch.upper()] + k) % 26] if ch.isalpha() else ch for ch in text)
 
 def shift_decrypt_text(text, key):
     return shift_encrypt_text(text, -int(key))
@@ -54,7 +46,7 @@ def shift_letters_only(text, key):
     s = sanitize_letters(text)
     return ''.join(I2A[(A2I[c] + k) % 26] for c in s)
 
-# Substitution
+# == Substitution ==
 def build_subst_maps(key26):
     key26 = sanitize_letters(key26)
     if len(key26) != 26 or len(set(key26)) != 26:
@@ -65,85 +57,44 @@ def build_subst_maps(key26):
 
 def subst_encrypt_text(text, key26):
     enc_map, _ = build_subst_maps(key26)
-    res = ''
-    for ch in text:
-        if ch.isalpha():
-            if ch.isupper():
-                res += enc_map[ch]
-            else:
-                res += enc_map[ch.upper()].lower()
-        else:
-            res += ch
-    return res
+    return ''.join(enc_map.get(ch.upper(), ch) if ch.isalpha() else ch for ch in text)
 
 def subst_decrypt_text(text, key26):
     _, dec_map = build_subst_maps(key26)
-    res = ''
-    for ch in text:
-        if ch.isalpha():
-            if ch.isupper():
-                res += dec_map[ch]
-            else:
-                res += dec_map[ch.upper()].lower()
-        else:
-            res += ch
-    return res
+    return ''.join(dec_map.get(ch.upper(), ch) if ch.isalpha() else ch for ch in text)
 
 def subst_letters_only(text, key26):
     enc_map, _ = build_subst_maps(key26)
     s = sanitize_letters(text)
     return ''.join(enc_map[c] for c in s)
 
-# Affine
+# == Affine ==
 def affine_encrypt_text(text, a, b):
-    a = int(a); b = int(b)
+    a, b = int(a), int(b)
     if egcd(a, 26)[0] != 1:
         raise ValueError('a must be coprime with 26 for Affine cipher')
-    res = ''
-    for ch in text:
-        if ch.isalpha():
-            base = ord('A') if ch.isupper() else ord('a')
-            x = (A2I[ch.upper()]
-                 if ch.isupper() else A2I[ch.upper()])
-            y = (a * A2I[ch.upper()] + b) % 26
-            res += chr(y + base) if ch.isupper() else chr(y + ord('a'))
-        else:
-            res += ch
-    return res
+    return ''.join(I2A[(a * A2I[ch.upper()] + b) % 26] if ch.isalpha() else ch for ch in text)
 
 def affine_decrypt_text(text, a, b):
-    a = int(a); b = int(b)
+    a, b = int(a), int(b)
     inv = modinv(a, 26)
-    res = ''
-    for ch in text:
-        if ch.isalpha():
-            base = ord('A') if ch.isupper() else ord('a')
-            x = (inv * (A2I[ch.upper()] - b)) % 26
-            res += chr(x + base) if ch.isupper() else chr(x + ord('a'))
-        else:
-            res += ch
-    return res
+    return ''.join(I2A[(inv * (A2I[ch.upper()] - b)) % 26] if ch.isalpha() else ch for ch in text)
 
 def affine_letters_only(text, a, b):
-    a = int(a); b = int(b)
+    a, b = int(a), int(b)
     if egcd(a, 26)[0] != 1:
         raise ValueError('a must be coprime with 26 for Affine cipher')
     s = sanitize_letters(text)
     return ''.join(I2A[(a * A2I[c] + b) % 26] for c in s)
 
-# Vigenere
+# == Vigenere ==
 def vigenere_encrypt_text(text, key):
     key = sanitize_letters(key)
-    if not key:
-        return text
-    res = ''
-    ki = 0
+    res, ki = '', 0
     for ch in text:
         if ch.isalpha():
             k = A2I[key[ki % len(key)]]
-            base = ord('A') if ch.isupper() else ord('a')
-            y = (A2I[ch.upper()] + k) % 26
-            res += chr(y + base)
+            res += I2A[(A2I[ch.upper()] + k) % 26]
             ki += 1
         else:
             res += ch
@@ -151,16 +102,11 @@ def vigenere_encrypt_text(text, key):
 
 def vigenere_decrypt_text(text, key):
     key = sanitize_letters(key)
-    if not key:
-        return text
-    res = ''
-    ki = 0
+    res, ki = '', 0
     for ch in text:
         if ch.isalpha():
             k = A2I[key[ki % len(key)]]
-            x = (A2I[ch.upper()] - k) % 26
-            base = ord('A') if ch.isupper() else ord('a')
-            res += chr(x + base)
+            res += I2A[(A2I[ch.upper()] - k) % 26]
             ki += 1
         else:
             res += ch
@@ -168,29 +114,19 @@ def vigenere_decrypt_text(text, key):
 
 def vigenere_letters_only(text, key):
     key = sanitize_letters(key)
-    if not key:
-        return sanitize_letters(text)
     s = sanitize_letters(text)
-    res = ''
-    for i,ch in enumerate(s):
-        k = A2I[key[i % len(key)]]
-        res += I2A[(A2I[ch] + k) % 26]
-    return res
+    return ''.join(I2A[(A2I[ch] + A2I[key[i % len(key)]]) % 26] for i, ch in enumerate(s))
 
-# Hill cipher
-
+# == Hill ==
 def hill_prepare_blocks(s, k):
     while len(s) % k != 0:
         s += 'X'
     nums = [A2I[c] for c in s]
-    blocks = [nums[i:i+k] for i in range(0, len(nums), k)]
-    return blocks
+    return [nums[i:i+k] for i in range(0, len(nums), k)]
 
 def hill_encrypt_letters_only(text, key_numbers):
     nums = [int(x) % 26 for x in key_numbers]
     n = int(round(len(nums) ** 0.5))
-    if n * n != len(nums):
-        raise ValueError('Hill key must contain n*n numbers')
     K = np.array(nums).reshape((n, n))
     s = sanitize_letters(text)
     blocks = hill_prepare_blocks(s, n)
@@ -203,8 +139,6 @@ def hill_encrypt_letters_only(text, key_numbers):
 def hill_decrypt_letters_only(text, key_numbers):
     nums = [int(x) % 26 for x in key_numbers]
     n = int(round(len(nums) ** 0.5))
-    if n * n != len(nums):
-        raise ValueError('Hill key must contain n*n numbers')
     K = np.array(nums).reshape((n, n))
     det = int(round(np.linalg.det(K))) % 26
     inv_det = modinv(det, 26)
@@ -218,62 +152,74 @@ def hill_decrypt_letters_only(text, key_numbers):
         res += ''.join(I2A[int(x)] for x in prod)
     return res
 
-# Permutation 
-def permutation_encrypt_letters_only(text, perm):
-    perm = [int(x) for x in perm]
-    k = len(perm)
-    if sorted(perm) != list(range(k)):
-        raise ValueError('Permutation must be indices 0..k-1')
+# == Permutation ==
+def _parse_permutation_input(raw_list):
+    if not raw_list:
+        raise ValueError('Permutation key is empty')
+    if len(raw_list) == 1 and raw_list[0].isdigit() and len(raw_list[0]) > 1:
+        chars = list(raw_list[0])
+        nums = [int(ch) for ch in chars]
+    else:
+        try:
+            nums = [int(x) for x in raw_list]
+        except:
+            raise ValueError('Permutation key must be digits, either like 3142 or 3,1,4,2')
+    zero_based = [n - 1 for n in nums]
+    k = len(zero_based)
+    if any((x < 0 or x >= k) for x in zero_based):
+        raise ValueError(f'Permutation indices must be in 1..{k}')
+    if sorted(zero_based) != list(range(k)):
+        raise ValueError('Permutation key must contain each index 1..k exactly once')
+    return zero_based
+
+def permutation_encrypt_letters_only(text, perm_raw):
+    pb = _parse_permutation_input(perm_raw)
+    k = len(pb)
     s = sanitize_letters(text)
+    # pad with X
     while len(s) % k != 0:
         s += 'X'
     res = ''
     for i in range(0, len(s), k):
         block = list(s[i:i+k])
-        cipher_block = [''] * k
-        for j, pi in enumerate(perm):
-            cipher_block[j] = block[pi]
-        res += ''.join(cipher_block)
+        # for output position j, take original at index pb[j]
+        cipher_block = ''.join(block[pb[j]] for j in range(k))
+        res += cipher_block
     return res
 
-def permutation_decrypt_letters_only(text, perm):
-    perm = [int(x) for x in perm]
-    k = len(perm)
-    inv = [0] * k
-    for i, p in enumerate(perm):
-        inv[p] = i
+def permutation_decrypt_letters_only(text, perm_raw):
+    pb = _parse_permutation_input(perm_raw)
+    k = len(pb)
     s = sanitize_letters(text)
     res = ''
     for i in range(0, len(s), k):
         block = list(s[i:i+k])
-        plain_block = [''] * k
+        original = [''] * k
         for j in range(k):
-            plain_block[inv[j]] = block[j]
-        res += ''.join(plain_block)
+            original[pb[j]] = block[j]
+        res += ''.join(original)
     return res
 
-# Playfair (kita baka pake kotak persegi panjang 2x13 biar 26 huruf bisa pas)
-def build_playfair_table(key, rows=2, cols=13):
-    key = sanitize_letters(key)
+# == Playfair==
+def build_playfair_table(key):
+    key = sanitize_letters(key).replace("J", "I")
     seen = []
     for c in key:
         if c not in seen:
             seen.append(c)
     for c in ALPHABET:
+        if c == 'J':  
+            continue
         if c not in seen:
             seen.append(c)
-    table = [seen[i * cols:(i + 1) * cols] for i in range(rows)]
+    table = [seen[i * 5:(i + 1) * 5] for i in range(5)]
     return table
 
-def playfair_letters_only(text, key, rows=2, cols=13):
-    tbl = build_playfair_table(key, rows, cols)
-    pos = {}
-    for r in range(rows):
-        for c in range(cols):
-            pos[tbl[r][c]] = (r, c)
-    s = sanitize_letters(text)
-    pairs = []
-    i = 0
+def playfair_process(text, key, decrypt=False):
+    tbl = build_playfair_table(key)
+    pos = {tbl[r][c]: (r, c) for r in range(5) for c in range(5)}
+    s = sanitize_letters(text).replace("J", "I")
+    pairs, i = [], 0
     while i < len(s):
         a = s[i]
         b = s[i + 1] if i + 1 < len(s) else 'X'
@@ -288,37 +234,43 @@ def playfair_letters_only(text, key, rows=2, cols=13):
         ra, ca = pos[a]
         rb, cb = pos[b]
         if ra == rb:
-            res += tbl[ra][(ca + 1) % cols]
-            res += tbl[rb][(cb + 1) % cols]
+            if not decrypt:
+                res += tbl[ra][(ca + 1) % 5] + tbl[rb][(cb + 1) % 5]
+            else:
+                res += tbl[ra][(ca - 1) % 5] + tbl[rb][(cb - 1) % 5]
         elif ca == cb:
-            res += tbl[(ra + 1) % rows][ca]
-            res += tbl[(rb + 1) % rows][cb]
+            if not decrypt:
+                res += tbl[(ra + 1) % 5][ca] + tbl[(rb + 1) % 5][cb]
+            else:
+                res += tbl[(ra - 1) % 5][ca] + tbl[(rb - 1) % 5][cb]
         else:
-            res += tbl[ra][cb]
-            res += tbl[rb][ca]
+            res += tbl[ra][cb] + tbl[rb][ca]
     return res
 
-# One time pad (HURUF DOANG)
-
-def otp_letters_only(text, key_stream):
+# == OTP ==
+def otp_encrypt(text, key_stream):
     s = sanitize_letters(text)
     ks = sanitize_letters(key_stream)
     if len(ks) < len(s):
-        raise ValueError('Key stream shorter than text; provide a longer key file or key')
-    res = ''
-    for i, ch in enumerate(s):
-        res += I2A[(A2I[ch] + A2I[ks[i]]) % 26]
-    return res
+        raise ValueError('Key stream shorter than text')
+    return ''.join(I2A[(A2I[s[i]] + A2I[ks[i]]) % 26] for i in range(len(s)))
 
-#==UI FLASKNYA==
+def otp_decrypt(text, key_stream):
+    s = sanitize_letters(text)
+    ks = sanitize_letters(key_stream)
+    if len(ks) < len(s):
+        raise ValueError('Key stream shorter than text')
+    return ''.join(I2A[(A2I[s[i]] - A2I[ks[i]]) % 26] for i in range(len(s)))
+
+# == Flask UI ==
 TEMPLATE = '''
 <!doctype html>
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Web Cipher Project Kriptograpi ARA</title>
+  <title>Web Cipher Project Kriptografi ARA</title>
   <style>
-    body{font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial; padding:20px; max-width:1100px; margin:auto}
+    body{font-family: system-ui; padding:20px; max-width:1100px; margin:auto}
     textarea{width:100%; height:160px}
     input[type=text], input[type=file], select{width:100%; padding:6px}
     .row{display:flex; gap:20px}
@@ -331,7 +283,7 @@ TEMPLATE = '''
   </style>
 </head>
 <body>
-  <h1>Web Cipher Project Kriptograpi ARA</h1>
+  <h1>Web Cipher Project Kriptografi ARA</h1>
   <div class="panel">
     <form method="post" action="/process" enctype="multipart/form-data">
       <div class="row">
@@ -339,18 +291,17 @@ TEMPLATE = '''
           <label>Input mode</label>
           <select name="input_mode" id="input_mode">
             <option value="text">Typed text</option>
-            <option value="file">Upload file (binary allowed)</option>
+            <option value="file">Upload file (Shift only)</option>
           </select>
 
           <div id="text_input">
-            <label>Plaintext / Ciphertext (type here)</label>
+            <label>Plaintext / Ciphertext</label>
             <textarea name="text">{{ request_text or '' }}</textarea>
           </div>
 
           <div id="file_input">
-            <label>Choose file to process</label>
+            <label>Choose file</label>
             <input type="file" name="file">
-            <p class="note">When encrypting a file, we store original filename inside the resulting .dat so you can restore extension on decryption.</p>
           </div>
 
           <label>Cipher</label>
@@ -372,16 +323,16 @@ TEMPLATE = '''
           </select>
 
           <label>Key / Parameters</label>
-          <input type="text" name="key" placeholder="Shift: number. Substitution: 26-letter map. Affine: a,b. Vigenere: text. Hill: comma numbers (n*n). Permutation: comma indices. Playfair: text. OTP: paste key or upload file">
+          <input type="text" name="key">
 
-          <label>OTP key file (for One-time-pad)</label>
+          <label>OTP key file (optional)</label>
           <input type="file" name="otp_keyfile">
 
           <label>Display mode</label>
           <select name="display_mode">
-            <option value="preserve">Preserve non-letters & case (default where supported)</option>
-            <option value="letters_only">Letters only (A–Z uppercase, drop others)</option>
-            <option value="group5">Group into 5-letter groups (letters only, uppercase)</option>
+            <option value="preserve">Preserve</option>
+            <option value="letters_only">Letters only</option>
+            <option value="group5">Group of 5</option>
           </select>
 
           <br><br>
@@ -393,11 +344,6 @@ TEMPLATE = '''
             <p class="error">{{ error }}</p>
           {% endif %}
           <textarea readonly>{{ result or '' }}</textarea>
-
-          {% if download_link %}
-            <p><a href="{{ download_link }}">Download resulting file</a></p>
-          {% endif %}
-
         </div>
       </div>
     </form>
@@ -421,7 +367,7 @@ TEMPLATE = '''
 
 @app.route('/')
 def index():
-    return render_template_string(TEMPLATE, result=None, error=None, download_link=None, request_text='')
+    return render_template_string(TEMPLATE, result=None, error=None, request_text='')
 
 @app.route('/process', methods=['POST'])
 def process():
@@ -433,162 +379,62 @@ def process():
     uploaded = request.files.get('file')
     otp_keyfile = request.files.get('otp_keyfile')
 
-    result_text = ''
-    error = None
-    download_link = None
+    result_text, error = '', None
     request_text = request.form.get('text') or ''
 
     try:
+        # File mode (Shift only)
         if input_mode == 'file' and uploaded and uploaded.filename:
             data = uploaded.read()
             filename = uploaded.filename
-            if cipher == 'Shift':
-                if not key:
-                    raise ValueError('For file-mode Shift: supply numeric key')
-                k = int(key) % 256
-                if op == 'enc':
-                    out = bytes((b + k) % 256 for b in data)
-                else:
-                    out = bytes((b - k) % 256 for b in data)
-                bio = BytesIO()
-                name_bytes = filename.encode('utf-8')
-                bio.write(len(name_bytes).to_bytes(4, 'big'))
-                bio.write(name_bytes)
-                bio.write(out)
-                bio.seek(0)
-                return send_file(bio, as_attachment=True, download_name=filename + '.dat')
-            else:
-                raise ValueError('File-mode currently supports only Shift (byte-wise) in this demo. For typed text use other ciphers.')
+            if cipher != 'Shift':
+                raise ValueError('File mode only supports Shift (byte-wise)')
+            if not key:
+                raise ValueError('Shift key required for file mode')
+            k = int(key) % 256
+            out = bytes((b + k) % 256 for b in data) if op == 'enc' else bytes((b - k) % 256 for b in data)
+            bio = BytesIO(out)
+            return send_file(bio, as_attachment=True, download_name=filename + '.dat')
 
         text = request_text
 
-        def finalize_letters_only(txt):
-            if display_mode == 'group5':
-                return chunk5(sanitize_letters(txt))
-            return sanitize_letters(txt)
-
+        # == Proses Cipher ==
         if cipher == 'Shift':
-            if display_mode == 'letters_only' or display_mode == 'group5':
-                if op == 'enc': result_text = shift_letters_only(text, key or '0')
-                else: result_text = shift_letters_only(text, -int(key) if key else 0)
-                if display_mode == 'group5': result_text = chunk5(result_text)
-            else:
-                if not key:
-                    key = '0'
-                if op == 'enc': result_text = shift_encrypt_text(text, key)
-                else: result_text = shift_decrypt_text(text, key)
-
+            result_text = shift_letters_only(text, key or '0') if display_mode != 'preserve' else (
+                shift_encrypt_text(text, key) if op == 'enc' else shift_decrypt_text(text, key))
         elif cipher == 'Substitution':
-            if not key:
-                raise ValueError('Substitution requires a 26-letter key map')
-            if display_mode == 'letters_only' or display_mode == 'group5':
-                if op == 'enc': result_text = subst_letters_only(text, key)
-                else: result_text = subst_letters_only(text, key) 
-                if display_mode == 'group5': result_text = chunk5(result_text)
-            else:
-                if op == 'enc': result_text = subst_encrypt_text(text, key)
-                else: result_text = subst_decrypt_text(text, key)
-
+            result_text = subst_letters_only(text, key) if display_mode != 'preserve' else (
+                subst_encrypt_text(text, key) if op == 'enc' else subst_decrypt_text(text, key))
         elif cipher == 'Affine':
-            if ',' not in key:
-                raise ValueError('Affine key must be two integers a,b separated by comma')
-            a_s, b_s = key.split(',', 1)
-            if display_mode == 'letters_only' or display_mode == 'group5':
-                if op == 'enc': result_text = affine_letters_only(text, int(a_s), int(b_s))
-                else: result_text = affine_letters_only(text, int(a_s), int(b_s)) 
-            else:
-                if op == 'enc': result_text = affine_encrypt_text(text, int(a_s), int(b_s))
-                else: result_text = affine_decrypt_text(text, int(a_s), int(b_s))
-
+            a, b = key.split(',', 1)
+            result_text = affine_letters_only(text, a, b) if display_mode != 'preserve' else (
+                affine_encrypt_text(text, a, b) if op == 'enc' else affine_decrypt_text(text, a, b))
         elif cipher == 'Vigenere':
-            if display_mode == 'letters_only' or display_mode == 'group5':
-                if op == 'enc': result_text = vigenere_letters_only(text, key)
-                else: result_text = vigenere_letters_only(text, key) 
-            else:
-                if op == 'enc': result_text = vigenere_encrypt_text(text, key)
-                else: result_text = vigenere_decrypt_text(text, key)
-
+            result_text = vigenere_letters_only(text, key) if display_mode != 'preserve' else (
+                vigenere_encrypt_text(text, key) if op == 'enc' else vigenere_decrypt_text(text, key))
         elif cipher == 'Hill':
-            nums = [x.strip() for x in key.split(',') if x.strip() != '']
-            if not nums:
-                raise ValueError('Hill requires comma-separated numbers for the key matrix (n*n numbers).')
-            if display_mode == 'letters_only' or display_mode == 'group5':
-                if op == 'enc': result_text = hill_encrypt_letters_only(text, nums)
-                else: result_text = hill_decrypt_letters_only(text, nums)
-                if display_mode == 'group5': result_text = chunk5(result_text)
-            else:
-                enc = hill_encrypt_letters_only(text, nums) if op == 'enc' else hill_decrypt_letters_only(text, nums)
-                letters = list(enc)
-                out = ''
-                li = 0
-                for ch in text:
-                    if ch.isalpha():
-                        c = letters[li]
-                        out += c.lower() if ch.islower() else c
-                        li += 1
-                    else:
-                        out += ch
-                result_text = out
-
+            nums = [x.strip() for x in key.split(',') if x.strip()]
+            result_text = hill_encrypt_letters_only(text, nums) if op == 'enc' else hill_decrypt_letters_only(text, nums)
         elif cipher == 'Permutation':
-            perm = [x.strip() for x in key.split(',') if x.strip() != '']
-            if not perm:
-                raise ValueError('Permutation requires comma indices like 2,0,1')
-            if display_mode == 'letters_only' or display_mode == 'group5':
-                if op == 'enc': result_text = permutation_encrypt_letters_only(text, perm)
-                else: result_text = permutation_decrypt_letters_only(text, perm)
-                if display_mode == 'group5': result_text = chunk5(result_text)
-            else:
-                enc = permutation_encrypt_letters_only(text, perm) if op == 'enc' else permutation_decrypt_letters_only(text, perm)
-                letters = list(enc)
-                out = ''
-                li = 0
-                for ch in text:
-                    if ch.isalpha():
-                        c = letters[li]
-                        out += c.lower() if ch.islower() else c
-                        li += 1
-                    else:
-                        out += ch
-                result_text = out
-
+            raw_perm = [x.strip() for x in key.split(',') if x.strip()]
+            result_text = permutation_encrypt_letters_only(text, raw_perm) if op == 'enc' else permutation_decrypt_letters_only(text, raw_perm)
         elif cipher == 'Playfair':
-            if display_mode != 'letters_only' and display_mode != 'group5':
-                pass
-            if op == 'enc':
-                result_text = playfair_letters_only(text, key)
-            else:
-                raise ValueError('Playfair decryption not implemented in this demo (request if needed)')
-            if display_mode == 'group5': result_text = chunk5(result_text)
-
+            result_text = playfair_process(text, key, decrypt=(op=='dec'))
         elif cipher == 'One-time-pad':
-            keydata = ''
-            if otp_keyfile and otp_keyfile.filename:
-                keydata = otp_keyfile.read().decode('utf-8')
-            else:
-                keydata = key
-            if not keydata:
-                raise ValueError('Provide OTP key via uploaded file or paste key text')
-            if op == 'enc':
-                result_text = otp_letters_only(text, keydata)
-            else:
-                s = sanitize_letters(text)
-                ks = sanitize_letters(keydata)
-                if len(ks) < len(s):
-                    raise ValueError('OTP key shorter than text')
-                res = ''
-                for i, ch in enumerate(s):
-                    res += I2A[(A2I[ch] - A2I[ks[i]]) % 26]
-                result_text = res
-            if display_mode == 'group5': result_text = chunk5(result_text)
-
+            keydata = otp_keyfile.read().decode('utf-8') if (otp_keyfile and otp_keyfile.filename) else key
+            result_text = otp_encrypt(text, keydata) if op == 'enc' else otp_decrypt(text, keydata)
         else:
-            raise ValueError('Cipher not supported')
+            raise ValueError('Unknown cipher')
 
-        return render_template_string(TEMPLATE, result=result_text, error=None, download_link=download_link, request_text=request_text)
+        if display_mode == 'letters_only':
+            result_text = sanitize_letters(result_text)
+        elif display_mode == 'group5':
+            result_text = chunk5(sanitize_letters(result_text))
 
     except Exception as e:
-        return render_template_string(TEMPLATE, result=None, error=str(e), download_link=None, request_text=request_text)
+        error = str(e)
+
+    return render_template_string(TEMPLATE, result=result_text, error=error, request_text=request_text)
 
 if __name__ == '__main__':
     app.run(debug=True)
