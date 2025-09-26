@@ -154,27 +154,18 @@ def hill_decrypt_letters_only(text, key_numbers):
 
 # == Permutation ==
 def _parse_permutation_input(raw_list):
-    """
-    Accepts raw_list like ['3','1','4','2'] or ['3142'] and returns
-    a list of 0-based indices [2,0,3,1].
-    Raises ValueError on invalid format.
-    """
     if not raw_list:
         raise ValueError('Permutation key is empty')
-    # if single element and all digits, split into chars
     if len(raw_list) == 1 and raw_list[0].isdigit() and len(raw_list[0]) > 1:
         chars = list(raw_list[0])
         nums = [int(ch) for ch in chars]
     else:
-        # convert each piece to int
         try:
             nums = [int(x) for x in raw_list]
         except:
             raise ValueError('Permutation key must be digits, either like 3142 or 3,1,4,2')
-    # convert to 0-based
     zero_based = [n - 1 for n in nums]
     k = len(zero_based)
-    # validate values in range 0..k-1 and are a permutation
     if any((x < 0 or x >= k) for x in zero_based):
         raise ValueError(f'Permutation indices must be in 1..{k}')
     if sorted(zero_based) != list(range(k)):
@@ -182,10 +173,6 @@ def _parse_permutation_input(raw_list):
     return zero_based
 
 def permutation_encrypt_letters_only(text, perm_raw):
-    """
-    perm_raw: list of strings from splitting input (e.g. ['3','1','4','2'] or ['3142'])
-    returns encrypted letters-only (uppercase)
-    """
     pb = _parse_permutation_input(perm_raw)
     k = len(pb)
     s = sanitize_letters(text)
@@ -204,18 +191,16 @@ def permutation_decrypt_letters_only(text, perm_raw):
     pb = _parse_permutation_input(perm_raw)
     k = len(pb)
     s = sanitize_letters(text)
-    # no need to pad for decrypt (assume valid ciphertext length)
     res = ''
     for i in range(0, len(s), k):
         block = list(s[i:i+k])
-        # recover original: original[pb[j]] = block[j]
         original = [''] * k
         for j in range(k):
             original[pb[j]] = block[j]
         res += ''.join(original)
     return res
 
-# == Playfair (5x5 klasik, I=J digabung) ==
+# == Playfair==
 def build_playfair_table(key):
     key = sanitize_letters(key).replace("J", "I")
     seen = []
@@ -223,7 +208,7 @@ def build_playfair_table(key):
         if c not in seen:
             seen.append(c)
     for c in ALPHABET:
-        if c == 'J':  # skip J
+        if c == 'J':  
             continue
         if c not in seen:
             seen.append(c)
@@ -431,7 +416,6 @@ def process():
             nums = [x.strip() for x in key.split(',') if x.strip()]
             result_text = hill_encrypt_letters_only(text, nums) if op == 'enc' else hill_decrypt_letters_only(text, nums)
         elif cipher == 'Permutation':
-            # pass raw pieces (split by comma) to permutation functions
             raw_perm = [x.strip() for x in key.split(',') if x.strip()]
             result_text = permutation_encrypt_letters_only(text, raw_perm) if op == 'enc' else permutation_decrypt_letters_only(text, raw_perm)
         elif cipher == 'Playfair':
